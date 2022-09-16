@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/css-spinning-spinners/1.1.1/load2.css" />
+<script>
+
+function all_names(fn) {
+    let xhr = new XMLHttpRequest()
+    xhr.open('GET', 'known.txt', true)
+    xhr.setRequestHeader('Content-type', 'text/plain; charset=UTF-8')
+    xhr.send();
+     
+    xhr.onload = function () {
+        if(xhr.status === 200) {
+            fn(this.responseText.replace(/\r/g, '').split('\n'))
+        }
+    }
+}
+
+function predict(names, known, fn) {
+    let postObj = { 
+        'context': names.join('\n'),
+        'top_p': 0.9,
+        'temp': 0.8,
+        'response_length': 256,
+        'remove_input': true,
+    }
+
+    let post = JSON.stringify(postObj)
+    console.log('input: ', names)
+ 
+    const url = 'https://api.eleuther.ai/completion'
+    let xhr = new XMLHttpRequest()
+     
+    xhr.open('POST', url, true)
+    xhr.setRequestHeader('Content-type', 'application/json; charset=UTF-8')
+    xhr.send(post);
+     
+    xhr.onload = function () {
+        if(xhr.status === 200) {
+            const obj = JSON.parse(this.responseText)
+            fn(obj[0]['generated_text'].replace(/\r/g, '').split('\n'), known)
+        }
+    }
+}
+
+const display_count = 15
+function present(new_names, known) {
+    console.log('output: ', new_names)
+    
+    document.getElementsByClassName('loading')[0].style.display = 'none'
+    
+    var ul = document.getElementById('results')
+    
+    new_names = new_names.filter(function(item, pos) {
+        return new_names.indexOf(item) == pos && !known.includes(item) && item.length > 0;
+    })
+    
+    for (var i = 0; i < display_count && i < new_names.length - 1; i++)
+    {
+        var li = document.createElement("li")
+        li.appendChild(document.createTextNode(new_names[i]))
+        ul.appendChild(li)
+    }
+}
+
+const name_count = 30
+function generate(names) {
+    var chosen = [];
+    for (var i = 0; i < name_count; i++) {
+        chosen.push(names[Math.floor(Math.random() * names.length)])
+    }
+    
+    predict(chosen, names, present)
+}
+
+window.onload = function() { all_names(generate); }
+</script>
+</head>
+<body>
+<div class="loading" style="visibility: block"></div>
+<ul id="results" style="font-size: 25pt; list-style-type: none; text-align: center">
+</ul>
+</body>
+</html>
