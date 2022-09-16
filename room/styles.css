@@ -1,0 +1,148 @@
+body
+{
+    background-color: $(background_color);
+}
+
+/*-------------walk-------------------*/
+@keyframes walk_down {
+    0%,  23.9%  { background-position: -$(character_width)px   0px; }
+    24%, 48.9%  { background-position: 0px                     0px; }
+    49%, 73.9%  { background-position: -$(character_width)px   0px; }
+    74%, 100%   { background-position: -$(character_width*2)px 0px; }
+}
+@keyframes walk_left {
+    0%,  23.9%  { background-position: -$(character_width)px   -$(character_height)px; }
+    24%, 48.9%  { background-position: 0px                     -$(character_height)px; }
+    49%, 73.9%  { background-position: -$(character_width)px   -$(character_height)px; }
+    74%, 100%   { background-position: -$(character_width*2)px -$(character_height)px; }
+}
+@keyframes walk_right {
+    0%,  23.9%  { background-position: -$(character_width)px   -$(character_height * 2)px; }
+    24%, 48.9%  { background-position: 0px                     -$(character_height * 2)px; }
+    49%, 73.9%  { background-position: -$(character_width)px   -$(character_height * 2)px; }
+    74%, 100%   { background-position: -$(character_width*2)px -$(character_height * 2)px; }
+}
+@keyframes walk_up {
+    0%,  23.9%  { background-position: -$(character_width)px   -$(character_height * 3)px; }
+    24%, 48.9%  { background-position: 0px                     -$(character_height * 3)px; }
+    49%, 73.9%  { background-position: -$(character_width)px   -$(character_height * 3)px; }
+    74%, 100%   { background-position: -$(character_width*2)px -$(character_height * 3)px; }
+}
+/*-------------stand-------------------------------------*/
+@keyframes stand_down {
+    from { background-position: -$(character_width)px 0px; }
+    to { background-position: -$(character_width)px 0px; }
+}
+@keyframes  stand_left{
+    from { background-position: -$(character_width)px -$(character_height)px; }
+    to { background-position: -$(character_width)px -$(character_height)px; }
+}
+@keyframes stand_right {
+    from { background-position: -$(character_width)px -$(character_height * 2)px; }
+    to { background-position: -$(character_width)px -$(character_height * 2)px; }
+}
+@keyframes stand_up {
+    from { background-position: -$(character_width)px -$(character_height * 3)px; }
+    to { background-position: -$(character_width)px -$(character_height * 3)px; }
+}
+/*------------grabber---------------------*/
+@keyframes grab {
+    0% { background-position: -$(grabber_startframe * grabber_width)px 0px; }
+    100% { background-position: -$(grabber_endframe * grabber_width)px 0px; }
+}
+
+@keyframes release {
+    0% { background-position: -$(grabber_endframe * grabber_width)px 0px; }
+    100% { background-position: -$(grabber_startframe * grabber_width)px 0px; }
+}
+
+@keyframes grab_open {
+    0%, 100% { background-position: -$(grabber_startframe * grabber_width)px 0px; }
+}
+
+@keyframes grab_close {
+    0%, 100% { background-position: -$(grabber_endframe * grabber_width)px 0px; }
+}
+/*----------------------------------------*/
+
+@keyframes fly_left {
+    0% { transform: translateX(200%); }
+    100% { transform: translateX(0%); }
+}
+
+
+.grabber {
+    background-image: url("images/grabber.png");
+    background-size: $(grabber_width * 12)px $(grabber_height)px;
+    width: $(grabber_width)px;
+    height: $(grabber_height)px;
+    position: absolute;
+    z-index: 1000;
+}
+
+.character_image {
+    width: $(character_width)px;
+    height: $(character_height)px;
+    background-size: $(character_width * 3)px $(character_height * 4)px;
+}
+
+.character_behaviour
+{
+    position: absolute;
+    z-index: 10;
+}
+
+.arena
+{
+    background-image: url("images/room.png");
+    position: absolute;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+}
+
+.button
+{
+    position: absolute;
+    width: 120px;
+    height: 100px;
+    left: $(arena_element_width * 1.5 - 60)px;
+    z-index: 10;
+    top: $(arena_element_height + 20)px;
+}
+
+.countdown
+{
+    font-size: $(countdown_height)pt;
+    text-align: center;
+}
+
+.voting
+{
+    position: absolute;
+    top: 200px;
+    z-index: 10;
+    left: $(arena_element_width * 2 + 50)px;
+}
+
+.login
+{
+    position: absolute;
+    top: 50px;
+    z-index: 10;
+    left: $(arena_element_width * 2 + 50)px;
+}
+
+.rating {
+  unicode-bidi: bidi-override;
+  direction: rtl;
+}
+.rating > span {
+  display: inline-block;
+  position: relative;
+  width: 1.1em;
+}
+.rating > span:hover:before,
+.rating > span:hover ~ span:before {
+   content: "\2605";
+   position: absolute;
+}

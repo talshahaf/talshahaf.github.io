@@ -1,0 +1,1507 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>מרתפייל</title>
+<script>
+
+function round(n, dec)
+{
+    var c = Math.pow(10, dec);
+    return Math.round(n * c) / c;
+}
+
+function init()
+{
+    dimensions = getDimensions();
+
+    arena_tile_width = 10;
+    arena_tile_height = 18;
+    
+    background_color = '#ddddff';
+
+    sizefactor = round(Math.min((dimensions[0] / ((arena_tile_width * 32) * 2)), dimensions[1] / (arena_tile_height * 32 + 50)), 2);
+
+    character_width = 32 * sizefactor;
+    character_height = 32 * sizefactor;
+    walk_time = 0.5;
+    grabber_width = 100 * sizefactor;
+    grabber_height = 793 * sizefactor;
+    countdown_height = 50 * sizefactor;
+    vote_image_big = 100 * sizefactor;
+    vote_image_small = 40 * sizefactor;
+
+    grab_delay = 0.25;
+    grabber_startframe = 11;
+    grabber_endframe = 2;
+    precision = 10;
+    
+    padding_y_fix = 50;
+
+    grab_move_duration = walk_time * 2 * 1000;
+    tile_width = character_width;
+    tile_height = character_height;
+    arena_start_x = 4 * sizefactor;
+    arena_start_y = 4 * sizefactor;
+    arena_end_x = 4 * sizefactor;
+    arena_end_y = 9 * sizefactor;
+    arenaElement = null;
+    
+    arrow_width = 20;
+    arrow_height = 15;
+    
+    arena_element_width = tile_width * arena_tile_width + arena_start_x + arena_end_x;
+    arena_element_height = tile_height * arena_tile_height + arena_start_y + arena_end_y;
+    
+    //forbiddenPositions = [[0, 0, 2, 4],  [3, 3, 1, 1],  [3, 4, 3, 1], [9, 0, 2, 5],
+    //                      [7, 5, 3, 3], [8, 17, 2, 3], [5, 24, 2, 3], [11, 24, 2, 3]];
+    
+    walk_map = [0,0,0,0,0,0,1,0,0,0,
+                0,0,0,0,0,1,1,0,0,0,
+                0,0,1,1,1,1,1,0,0,0,
+                0,0,0,1,1,1,1,0,0,0,
+                0,1,0,0,0,1,0,0,0,0,
+                0,1,1,1,1,1,0,0,0,1,
+                1,1,1,1,1,1,0,0,0,1,
+                0,0,1,1,1,1,1,1,1,1,
+                1,1,1,1,1,1,1,1,1,1,
+                1,1,1,1,1,0,0,0,0,0,
+                1,1,1,1,1,0,0,0,0,0,
+                0,1,1,1,1,1,0,0,0,0,
+                0,1,1,1,1,1,1,1,1,1,
+                0,1,1,1,1,1,1,1,1,1,
+                0,1,1,1,1,0,0,0,1,1,
+                0,1,1,1,1,1,1,1,1,0,
+                0,1,1,1,1,1,0,0,0,0,
+                0,1,1,1,1,1,0,0,0,0];
+                          
+    loadCSS('styles.css');
+    
+    walks  = Array(StepAnimation("walk_down"), StepAnimation("walk_up"), StepAnimation("walk_left"), StepAnimation("walk_right"));
+    stands = Array(StepAnimation("stand_down"), StepAnimation("stand_up"), StepAnimation("stand_left"), StepAnimation("stand_right"));
+    grabs = Array(GrabberStepAnimation("grab"), GrabberStepAnimation("release"), GrabberStepAnimation("grab_open"), GrabberStepAnimation("grab_close"));
+    
+    character1 = null;
+    character2 = null;
+
+    available_characters = [];
+    all_characters = [];
+    controlledIndex = -1;
+    arrowElement = null;
+    grabber = null;
+
+    keysPressed = [false, false, false, false];
+
+    whenFreeHandlers = [];
+    
+    document.onkeydown = function(e) { keyUpDown(e, true); };
+    document.onkeypress = keyPress;
+    document.onkeyup = function(e) { keyUpDown(e, false); };
+    
+    begin();
+}
+
+
+
+function getDimensions()
+{
+    var w = window,
+    d = document,
+    e = d.documentElement,
+    g = d.getElementsByTagName('body')[0],
+    x = w.innerWidth || e.clientWidth || g.clientWidth,
+    y = w.innerHeight|| e.clientHeight|| g.clientHeight;
+    return [x - 100, y - 100];
+}
+function nextMatch(text, regex, idx)
+{
+    if(!idx)
+    {
+        idx = 0;
+    }
+    
+    var result = text.slice(idx).match(regex);
+    if(!result)
+    {
+        return result;
+    }
+    
+    return [result[0], result.index + idx];
+}
+function parseCSS(css)
+{
+    var pattern = /\$\([^)]*\)/;
+    var result = null;
+    var idx = 0;
+    while(result = nextMatch(css, pattern, idx))
+    {
+        try
+        {
+            idx = result[1] + 1;
+            exp = eval(result[0].slice(2, -1)); //ok because client side.
+            css = css.replace(result[0], exp);
+        }
+        catch(err)
+        {
+        
+        }
+    }
+    return css;
+}
+
+function loadCSS(path)
+{
+    request(path, function(response)
+    {
+        var style = document.createElement('style');
+        style.type = 'text/css';
+        style.innerHTML = parseCSS(response);
+        document.getElementsByTagName('head')[0].appendChild(style);
+    });
+}
+
+function request(url, cb)
+{
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+
+    xhr.onreadystatechange = function(e) {
+        if (this.readyState == 4 && this.status == 200)
+        {
+            if(cb)
+            {
+                cb(this.responseText);
+            }
+        }
+    };
+    
+    xhr.send();
+}
+
+/*function createCSSClass(name, body)
+{
+    var style = document.createElement('style');
+    style.type = 'text/css';
+    style.innerHTML = '.'+name+' { '+body+' }';
+    document.getElementsByTagName('head')[0].appendChild(style);
+    return style;
+}
+
+function clearClasses(element)
+{
+    var found_marker = -1;
+    for(var i = 0;i<element.classList.length;i++)
+    {
+        if(found_marker != -1)
+        {
+            element.classList.remove(element.classList[found_marker]);
+        }
+        if(element.classList[i] == 'end_of_permanent_classes')
+        {
+            found_marker = i + 1;
+        }
+    }
+}
+
+function addClasses(element, classes)
+{
+    for(var i = 0;i<classes.length;i++)
+    {
+        element.classList.add(classes[i]);
+    }
+}*/
+
+var pfx = ["webkit", "moz", "MS", "o", ""];
+function PrefixedEvent(element, type, callback) {
+	for (var p = 0; p < pfx.length; p++) {
+		if (!pfx[p]) type = type.toLowerCase();
+		element.addEventListener(pfx[p]+type, callback, false);
+	}
+}
+function PrefixedRemoveEvent(element, type, callback) {
+	for (var p = 0; p < pfx.length; p++) {
+		if (!pfx[p]) type = type.toLowerCase();
+		element.removeEventListener(pfx[p]+type, callback, false);
+	}
+}
+
+function MyObject()
+{
+    function ga(name)
+    {
+        return self[name];
+    }
+    function sa(name, val)
+    {
+        self[name] = val;
+        return self;
+    }
+    
+    function up(src)
+    {
+        Object.keys(src).forEach(function(key) { self[key] = src[key]; });
+        return self; //for chains and stuff
+    }
+    
+    var self = {
+        getattr: ga,
+        setattr: sa,
+        update: up,
+    };
+    return self;
+}
+
+function translateArena(pos, nounit)
+{
+    var yshift = 0;
+    if([0, 4, 5, 7, 8, 11, 12].indexOf(pos[1]) != -1)
+    {
+        yshift = 5;
+    }
+    return [((pos[0] * tile_width) + arena_start_x)+(nounit ? 0 : 'px'), ((pos[1] * tile_height) + arena_start_y + yshift)+(nounit ? 0 : 'px')];
+}
+
+function addUnit(val, n)
+{
+    return (parseInt(val, 10) + n) + 'px';
+}
+
+function validPosition(pos)
+{
+    var in_arena = pos[0] >= 0 && pos[1] >= 0 && pos[0] < arena_tile_width && pos[1] < arena_tile_height;
+    return walk_map[arena_tile_width * pos[1] + pos[0]] == 1 && in_arena;
+    /*for(var i = 0; i < forbiddenPositions.length; i++)
+    {
+        if(forbiddenPositions[i][0] <= pos[0] && forbiddenPositions[i][1] <= pos[1] &&
+           forbiddenPositions[i][0] + forbiddenPositions[i][2] >= pos[0] && forbiddenPositions[i][1] + forbiddenPositions[i][3] >= pos[1])
+        {
+            return false;
+        }
+    }
+    
+    return pos[0] >= 0 && pos[1] >= 0 && pos[0] < arena_tile_width && pos[1] < arena_tile_height;*/
+}
+
+function paintfloor()
+{
+    for(var x = 0; x < arena_tile_width; x++)
+    {
+        for(var y = 0; y < arena_tile_height; y++)
+        {
+            var tile = document.createElement('div');
+            coor = translateArena([x,y]);
+            tile.style.position = 'absolute';
+            tile.style.left = coor[0];
+            tile.style.top = coor[1];
+            tile.style.width = tile_width+'px';
+            tile.style.height = tile_height+'px';
+            tile.style.opacity = '0.5';
+            
+            tile.style.backgroundColor = validPosition([x,y]) ? '#bbbbff' : '#ffbbbb';
+            
+            arenaElement.appendChild(tile);
+        }
+    }
+}
+
+function createArrow()
+{
+    var arrow = document.createElement('div');
+    arrow.style.visibility = 'hidden';
+    arrow.style.width = (arrow_width * sizefactor) + 'px';
+    arrow.style.height = (arrow_height * sizefactor) + 'px';
+    arrow.style.marginLeft = (6 * sizefactor) + 'px';
+    arrow.style.backgroundImage = "url('characters/arrow.png')";
+    arrow.style.backgroundSize = '100% 100%';
+    arrow.style.backgroundRepeat = 'no-repeat';
+    arenaElement.appendChild(arrow);
+    return arrow;
+}
+
+function randomPosition()
+{
+    do
+    {
+        pos = [Math.floor(Math.random() * arena_tile_width), Math.floor(Math.random() * arena_tile_height)];
+    }
+    while(!validPosition(pos));
+    return pos;
+}
+
+function randomIndex(arr)
+{
+    return Math.floor(Math.random() * arr.length);
+}
+
+function randomChoice(arr)
+{
+    return arr[randomIndex(arr)];
+}
+
+function Animation(name)
+{
+    function get_animation_string(custom_iterations)
+    {
+        return self.name+' '+self.duration+' '+self.timing+' '+(custom_iterations || self.iteration_count) + ' ' + self.fillmode;
+    }
+
+    var self = MyObject().update({
+        name: name,
+        duration: (walk_time * 2)+'s',
+        iteration_count: 'infinite',
+        timing: 'linear',
+        fillmode: 'forwards',
+        getAnimationString: get_animation_string,
+    });
+    
+    return self;
+}
+
+function StepAnimation(name)
+{
+    return Animation(name).update({
+        timing: 'steps(4, end)',
+    });
+}
+
+function GrabberStepAnimation(name)
+{
+    return Animation(name).update({
+        timing: 'steps(9, end)',
+        duration: (walk_time * 0.75)+'s', //change
+    });
+}
+
+function LinearAnimation(name)
+{
+    return Animation(name).update({
+        timing: 'linear',
+        duration: walk_time+'s',
+        iteration_count: '1',
+    });
+}
+
+function applyAnimationToElement(element, animations)
+{
+    animation_strings = animations.map(function(anim) { return anim[0].getAnimationString(anim[1]); });
+    element.style.animation = animation_strings.join(', ');
+}
+
+function move(i, fromX, toX, fromY, toY, cb)
+{
+    i.setAnchoredPosition(fromX, fromY);
+    
+    var startTime = window.performance.now();
+    
+    var interval = setInterval(function()
+    {
+        var now = window.performance.now();
+        var ratio = ((now - startTime) / grab_move_duration);
+        i.setAnchoredPosition((ratio * (toX - fromX)) + fromX, (ratio * (toY - fromY)) + fromY);
+        
+        if(ratio >= 1.0)
+        {
+            clearInterval(interval);
+            i.setAnchoredPosition(toX, toY);
+            
+            if(cb)
+            {
+                cb();
+            }
+        }
+    }, precision);
+}
+
+function moveY(i, x, fromY, toY, cb)
+{
+    move(i, x, x, fromY, toY, cb);
+}
+
+function moveX(i, y, fromX, toX, cb)
+{
+    move(i, fromX, toX, y, y, cb);
+}
+
+function Character(pos, name)
+{
+    char_element = document.createElement('div');
+    char_element.classList.add('character_image');
+    char_element.classList.add('character_behaviour');
+    char_element.style.backgroundImage = "url('characters/"+name+".png')";
+    arenaElement.appendChild(char_element);
+    
+    function advance_position(dir)
+    {
+        switch(dir)
+        {
+            case 0:
+                self.pos[1]++;
+                break;
+            case 1:
+                self.pos[1]--;
+                break;
+            case 2:
+                self.pos[0]--;
+                break;
+            case 3:
+                self.pos[0]++;
+                break;
+        }
+    }
+    
+    function set_real_position(dir, count)
+    {
+        self.updatePosition();
+        switch(dir)
+        {
+            case 0:
+                self.element.style.top = addUnit(self.element.style.top, count);
+                if(self.arrow_element != null)
+                {
+                    self.arrow_element.style.top = addUnit(self.arrow_element.style.top, count);
+                }
+                break;
+            case 1:
+                self.element.style.top = addUnit(self.element.style.top, -count);
+                if(self.arrow_element != null)
+                {
+                    self.arrow_element.style.top = addUnit(self.arrow_element.style.top, -count);
+                }
+                break;
+            case 2:
+                self.element.style.left = addUnit(self.element.style.left, -count);
+                if(self.arrow_element != null)
+                {
+                    self.arrow_element.style.left = addUnit(self.arrow_element.style.left, -count);
+                }
+                break;
+            case 3:
+                self.element.style.left = addUnit(self.element.style.left, count);
+                if(self.arrow_element != null)
+                {
+                    self.arrow_element.style.left = addUnit(self.arrow_element.style.left, count);
+                }
+                break;
+        }
+    }
+    
+    function update_position()
+    {
+        coor = translateArena(self.pos);
+        self.element.style.left = coor[0];
+        self.element.style.top = coor[1];
+        self.element.style.zIndex = self.pos[1] + 10;
+        if(self.arrow_element != null)
+        {
+            coor2 = translateArena(self.pos, true);
+            coor2[1] -= character_height;
+            self.arrow_element.style.visibility = 'visible';
+            self.arrow_element.style.position = 'absolute';
+            self.arrow_element.style.left = coor2[0];
+            self.arrow_element.style.top = coor2[1];
+            self.arrow_element.style.zIndex = 1000;
+        }
+    }
+    
+    function _turn(dir, cb)
+    {
+        if(self.abducted){ return; }
+        if(!self.moving)
+        {
+            self.clearAnimations();
+            self.addAnimation(stands[dir]);
+        }
+        
+        if(cb)
+        {
+            cb();
+        }
+    }
+    
+    function calc_tiles_left(dir, count)
+    {
+        for(var i = 1; i <= count; i++)
+        {
+            isValidPosition = true;
+            switch(dir)
+            {
+                case 0:
+                    isValidPosition = validPosition([self.pos[0], self.pos[1] + i]);
+                    break;
+                case 1:
+                    isValidPosition = validPosition([self.pos[0], self.pos[1] - i]);
+                    break;
+                case 2:
+                    isValidPosition = validPosition([self.pos[0] - i, self.pos[1]]);
+                    break;
+                case 3:
+                    isValidPosition = validPosition([self.pos[0] + i, self.pos[1]]);
+                    break;
+                default:
+                    return -1;
+            }
+            
+            if(!isValidPosition)
+            {
+                return i - 1;
+            }
+        }
+        return count;
+    }
+    
+    function _advance(dir, count, cb, callOnFailure)
+    {
+        if(self.abducted){ return; }
+        if(self.moving || count < 0)
+        {
+            if(callOnFailure && cb)
+            {
+                cb();
+            }
+            return;
+        }
+        
+        count = self.calcTilesLeft(dir, count);
+        if(count == 0)
+        {
+            if(callOnFailure && cb)
+            {
+                cb();
+            }
+            return;
+        }
+        
+        self.moving = true;
+        self.clearAnimations();
+        self.addAnimation(walks[dir]);
+        
+        self.__advance(dir, count, cb);
+    }
+    function __advance(dir, count, cb)
+    {
+        if(count <= 0)
+        {
+            self.clearAnimations();
+            self.addAnimation(stands[dir]);
+            if(cb)
+            {
+                cb();
+            }
+            return;
+        }
+        
+        var pos = translateArena(self.pos, true);
+        
+        var tile_length = 0;
+        
+        switch(dir)
+        {
+            case 0:
+                tile_length = translateArena([self.pos[0], self.pos[1] + 1], true)[1] - pos[1];
+                break;
+            case 1:
+                tile_length = pos[1] - translateArena([self.pos[0], self.pos[1] - 1], true)[1];
+                break;
+            case 2:
+                tile_length = pos[0] - translateArena([self.pos[0] - 1, self.pos[1]], true)[0];
+                break;
+            case 3:
+                tile_length = translateArena([self.pos[0] + 1, self.pos[1]], true)[0] - pos[0];
+                break;
+        }
+        
+        var pixelIntervalSeconds = walk_time / tile_length;
+        
+        var startTime = window.performance.now();
+
+        var interval = setInterval(function()
+        {
+            var now = window.performance.now();
+            var shouldBe = (now - startTime) / (1000 *pixelIntervalSeconds);
+            self.setRealPosition(dir, shouldBe);
+            
+            if(shouldBe >= tile_length)
+            {
+                clearInterval(interval);
+                self.advancePosition(dir);
+                self.updatePosition();
+                self.moving = false;
+                self.__advance(dir, count - 1, cb);
+            }
+        }, pixelIntervalSeconds * 1000);
+    }
+    
+    function add_anim(anim, custom_iterations)
+    {
+        self.animations.push([anim, custom_iterations || anim.iteration_count]);
+        self.applyAnimations();
+    }
+    
+    function clear_anims()
+    {
+        self.animations = [];
+        self.applyAnimations();
+        if(self.arrow_element != null)
+        {
+            applyAnimationToElement(self.arrow_element, []);
+        }
+    }
+    
+    function apply_animations()
+    {
+        applyAnimationToElement(self.element, self.animations);
+    }
+    
+    function _lock()
+    {
+        self.locked = true;
+    }
+    function _unlock()
+    {
+        self.locked = false;
+    }
+    
+    function set_arrow_element(element)
+    {
+        self.arrow_element = element;
+        self.updatePosition();
+    }
+    
+    function _setAnchoredPosition(x, y)
+    {
+        self.element.style.left = x;
+        self.element.style.top = y;
+    }
+    
+    function _prepareAbduction()
+    {
+        self.abducted = true;
+    }
+    
+    function _abduct()
+    {
+        if(self.moving)
+        {
+            return;
+        }
+        
+        self.abducted = true;
+        coor = translateArena(self.pos, true);
+        
+        moveY(self, coor[0], coor[1], -self.height - padding_y_fix);
+    }
+    
+    function _get_grab_position()
+    {
+        coor = translateArena(self.pos, true);
+        coor[0] += self.width / 2;
+        coor[1] += self.height / 2;
+        return coor;
+    }
+    
+    var self = MyObject().update({
+        element: char_element,
+        advance: _advance,
+        __advance: __advance,
+        addAnimation: add_anim,
+        applyAnimations: apply_animations,
+        clearAnimations: clear_anims,
+        updatePosition: update_position,
+        advancePosition: advance_position,
+        calcTilesLeft: calc_tiles_left,
+        setArrowElement: set_arrow_element,
+        setRealPosition: set_real_position,
+        setAnchoredPosition: _setAnchoredPosition,
+        getGrabPosition: _get_grab_position,
+        abduct: _abduct,
+        prepareAbduction: _prepareAbduction,
+        turn: _turn,
+        lock: _lock,
+        unlock: _unlock,
+        pos: pos.slice(), //copy
+        moving: false,
+        animations: [],
+        locked: false,
+        arrow_element: null,
+        abducted: false,
+        width: character_width,
+        height: character_height,
+        name: name,
+    });
+    
+    self.turn(0);
+    self.updatePosition();
+    return self;
+}
+
+function Grabber(xPos, opened)
+{
+    grab_element = document.createElement('div');
+    grab_element.classList.add("grabber");
+    var height = grabber_height;
+    var width = grabber_width;
+    arenaElement.appendChild(grab_element);
+    
+    function _setAnchoredPosition(x, y)
+    {
+        self.element.style.left = x - (self.width / 2);
+        self.element.style.top = y-self.height;
+    }
+
+    function _moveY(x, fromY, toY, cb)
+    {
+        self.moving = true;
+        moveY(self, x, fromY, toY, function()
+        {
+            self.moving = false;
+            if(cb)
+            {
+                cb();
+            }
+        });
+    }
+    
+    function _grab(x, y, grab_cb, finished_cb)
+    {
+        if(self.moving)
+        {
+            return;
+        }
+        
+        self.moveY(x, 0, y, function()
+        {
+            var cb = function(event)
+            {
+                PrefixedRemoveEvent(self.element, 'AnimationEnd', cb);
+                self.opened = false;
+                self.animating = false;
+                self.updateAnimation();
+                setTimeout(function()
+                {
+                    if(grab_cb)
+                    {
+                        grab_cb();
+                    }
+                    self.moveY(x, y, -(character_height / 2) - padding_y_fix, function()
+                    {
+                        if(finished_cb)
+                        {
+                            finished_cb();
+                        }
+                    });
+                }, grab_delay * 1000);
+            }
+            
+            PrefixedEvent(self.element, 'AnimationEnd', cb);
+            self.opened = true;
+            self.animating = true;
+            self.updateAnimation();
+        });
+    }
+    
+    function _updateAnimation()
+    {
+        applyAnimationToElement(self.element, []);
+        if(self.opened && !self.animating)
+        {
+            applyAnimationToElement(self.element, [[grabs[2], 'infinite']]);
+        }
+        else if(self.opened && self.animating)
+        {
+            applyAnimationToElement(self.element, [[grabs[0], '1']]);
+        }
+        else if(!self.opened && !self.animating)
+        {
+            applyAnimationToElement(self.element, [[grabs[3], 'infinite']]);
+        }
+        else if(!self.opened && self.animating)
+        {
+            applyAnimationToElement(self.element, [[grabs[1], '1']]);
+        }
+    }
+    
+    var self = {
+        element: grab_element,
+        opened: opened,
+        animating: false,
+        moving: false,
+        updateAnimation: _updateAnimation,
+        grab: _grab,
+        height: height,
+        width: width,
+        setAnchoredPosition: _setAnchoredPosition,
+        moveY: _moveY,
+    };
+    
+    self.setAnchoredPosition(xPos, 0);
+    self.updateAnimation();
+    
+    return self;
+}
+
+function whenFree(idx, cb)
+{
+    whenFreeHandlers.push([idx, cb]);
+}
+
+function onAvailable(c)
+{
+    for(var i = 0; i < whenFreeHandlers.length; i++)
+    {
+        var handler = whenFreeHandlers[i];
+        if(all_characters[handler[0]] == c)
+        {
+            handler[1]();
+            whenFreeHandlers.splice(i, 1);
+            i--;
+        }
+    };
+}
+
+function tick()
+{
+    if(available_characters.length > 0)
+    {
+        tmp_available = available_characters.slice();
+        tmp_available.forEach(function(c)
+        {
+            onAvailable(c);
+            if(c.locked)
+            {
+                return;
+            }
+            action_possibilities = [function(dir, count, cb){ c.advance(dir, count, cb, true); }, function(dir, count, cb){ c.turn(dir, cb); }, function(dir, count, cb){ cb(); }, function(dir, count, cb){ cb(); }, function(dir, count, cb){ cb(); }];
+            func = randomChoice(action_possibilities);
+            
+            var dir = Math.floor(Math.random() * walks.length);
+            
+            count_possibilities = [1,1,1,1,1,2,2,2,2,3,3,3,4,5,6];
+            var count = randomChoice(count_possibilities);
+            
+            func(dir, count, function()
+            {
+                setTimeout(function()
+                {
+                    if(available_characters.indexOf(c) == -1)
+                    {
+                        available_characters.push(c);
+                        onAvailable(c);
+                    }
+                }, 0);
+            });
+            
+            var index = available_characters.indexOf(c);
+            if (index != -1)
+            {
+              available_characters.splice(index, 1);
+            }
+        });
+    }
+    
+    var controlCb = function()
+    {
+        if(controlledIndex != -1)
+        {
+            for(var i = 0; i < keysPressed.length; i++)
+            {
+                if(keysPressed[i])
+                {
+                    all_characters[controlledIndex].advance(i, 1, controlCb, false);
+                    break;
+                }
+            }
+        }
+    }
+    controlCb();
+}
+
+function removeArrow()
+{
+    if(controlledIndex != -1)
+    {
+        all_characters[controlledIndex].unlock();
+        all_characters[controlledIndex].setArrowElement(null);
+        arrowElement.style.visibility = 'hidden';
+        controlledIndex = -1;
+    }
+}
+
+function abduct(who_index, cb)
+{
+    if(who_index == controlledIndex)
+    {
+        removeArrow();
+    }
+    
+    all_characters[who_index].prepareAbduction();
+    
+    whenFree(who_index, function()
+    {
+        var c = all_characters[who_index];
+        var index = available_characters.indexOf(all_characters[who_index]);
+        if (index != -1)
+        {
+            available_characters.splice(index, 1);
+        }
+        
+        all_characters.splice(who_index, 1);
+        
+        setTimeout(function()
+        {
+            grabpos = c.getGrabPosition();
+            grabber.grab(grabpos[0], grabpos[1], function()
+            {
+                c.abduct();
+            }, function()
+                {
+                    
+                    if(cb)
+                    {
+                        cb();
+                    }
+                });
+        }, 100);
+    });
+}
+
+var cookieName = 'seenAbduction';
+function getCookie() {
+    var name = cookieName + "=";
+    var ca = document.cookie.split(';');
+    for(var i = 0; i <ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0) == ' ') {
+            c = c.substring(1);
+        }
+        if (c.indexOf(name) == 0) {
+            return c.substring(name.length, c.length);
+        }
+    }
+    return "";
+}
+
+function setCookie(value)
+{
+    document.cookie = cookieName+"="+value;
+}
+
+function seenAbduction(last_change)
+{
+    var seenOn = getCookie();
+    if(seenOn == 0)
+    {
+        return false;
+    }
+
+    return seenOn >= last_change;
+}
+
+function clearSeenAbduction()
+{
+    setCookie(0);
+}
+
+function setSeenAbduction()
+{
+    setCookie(new Date().getTime());
+}
+
+function displayPhoto(name, animate)
+{
+    gradient = document.createElement('div');
+    gradient.style.left = arena_element_width * 2 + 5;
+    gradient.style.position = 'absolute';
+    gradient.style.height = arena_element_height;
+    gradient.style.width = arena_element_width * 2;
+    gradient.style.background = 'linear-gradient(to right, rgba(255,0,0,0) 0%, '+background_color+' 20%, '+background_color+' 100%)';
+    photo_element = document.createElement('div');
+    photo_element.style.backgroundImage = 'url("images/'+name+'.jpg")';
+    photo_element.style.position = 'absolute';
+    photo_element.style.left = arena_element_width + 5;
+    photo_element.style.height = arena_element_height;
+    photo_element.style.width = arena_element_width;
+    photo_element.style.backgroundRepeat = 'no-repeat';
+    photo_element.style.backgroundSize = 'cover';
+    photo_element.style.zIndex = '-10';
+    
+    if(animate)
+    {
+        photo_element.style.animation = 'fly_left 1s forwards';
+    }
+    
+    document.body.appendChild(gradient);
+    document.body.appendChild(photo_element);
+}
+
+function sort(arr, key)
+{
+    if(!key)
+    {
+        key = function(a) {return a};
+    }
+    arr.sort(function(a,b)
+    {
+        keyA = key(a);
+        keyB = key(b);
+        if(keyA < keyB) return -1;
+        if(keyA > keyB) return 1;
+        return 0;
+    });
+}
+
+function sortAndCheck(results)
+{
+    sort(results, function(result) { return result["start"]; });
+    
+    lastDate = null;
+    
+    for(var i = 0; i < results.length; i++)
+    {
+        var result = results[i];
+        if(result["start"] > result["end"])
+        {
+            return false;
+        }
+
+        if(lastDate == null)
+        {
+            lastDate = result["end"];
+        }
+        else if(lastDate > result["start"])
+        {
+            return false;
+        }
+        lastDate = result["end"];
+    };
+    return true;
+}
+
+function getClosestResult(results)
+{
+    var now = new Date();
+    var closestResult;
+    var closestField;
+    var foundAny = false;
+
+    for(var i = 0; i < results.length; i++)
+    {
+        if(now < results[i]["start"] && (!foundAny || results[i]["start"] < closestResult[closestResult]))
+        {
+            closestResult = results[i];
+            closestField = "start";
+            foundAny = true;
+        }
+        if(now < results[i]["end"] && (!foundAny || results[i]["end"] < closestResult[closestResult]))
+        {
+            closestResult = results[i];
+            closestField = "end";
+            foundAny = true;
+        }
+    }
+    
+    if(!foundAny)
+    {
+        return null;
+    }
+    return [closestResult, closestField];
+}
+
+function hourify(h, m, s)
+{
+    return round(h, 0) + ':' + ("00" + round(m, 0)).slice(-2) + ':' + ("00" + round(s, 0)).slice(-2);
+}
+
+function startCountdown(todate)
+{
+    watch = document.createElement('div');
+    watch.style.left = 0;
+    watch.style.top = arena_element_height;
+    watch.style.position = 'absolute';
+    watch.style.height = countdown_height;
+    watch.style.width = arena_element_width;
+    watch.classList.add('countdown');
+    watch.innerHTML = '00:00:00';
+    
+    var tick = function()
+    {
+        var now = new Date();
+        if(now > todate)
+        {
+            watch.innerHTML = '00:00:00';
+        }
+        else
+        {
+            var timespan = Math.floor((todate - now) / 1000);
+            var hour = Math.floor(timespan / 3600);
+            var minute = Math.floor((timespan % 3600) / 60);
+            var second = timespan % 60;
+            watch.innerHTML = hourify(hour,minute,second);
+        }
+    };
+    
+    setInterval(tick, 1000);
+    tick();
+    document.body.appendChild(watch);
+}
+
+function startAll(results)
+{
+    if(!sortAndCheck(results))
+    {
+        console.log("cant work with results");
+        results = [];
+    }
+    
+    //populateVoting(results);
+    
+    closest = getClosestResult(results);
+    
+    character_names = ["tal", "keren", "asaf", "noam", "bar", "pickman", "eial"];
+    
+    var tribute = -1;
+    var tribute_name = '';
+    var showGrab = false;
+    
+    if(closest)
+    {
+        startCountdown(closest[0][closest[1]]);
+    }
+    
+    if(closest && closest[1] == "end")
+    {
+        //we are in chosen time!
+        showGrab = !seenAbduction(closest[0]["start"]);
+        
+        tribute_name = closest[0]["name"];
+        tribute = character_names.indexOf(tribute_name);
+    }
+    
+    arenaElement = document.getElementById("arena");
+    arenaElement.style.width = arena_element_width;
+    arenaElement.style.height = arena_element_height;
+    
+    
+    audioElement = document.getElementById("audio");
+    audioElement.style.position = 'absolute';
+    audioElement.style.top = arena_element_height + 20;
+    //paintfloor();
+    
+    grabber = Grabber(0, true);
+    arrowElement = createArrow();
+    
+    for(var i = 0; i < character_names.length; i++)
+    {
+        if(tribute == i && !showGrab) //if we don't need to show the abduction but there was one, don't draw that character
+        {
+            continue;
+        }
+        all_characters.push(Character(randomPosition(), character_names[i]));
+    }
+
+    available_characters = all_characters.slice();
+
+    setInterval(tick, walk_time * 1000);
+    
+    if(tribute != -1)
+    {
+        if(showGrab)
+        {
+            setTimeout(function()
+            {
+                abduct(tribute, function()
+                {
+                    displayPhoto(tribute_name, true);
+                    setSeenAbduction();
+                });
+            }, 5000);
+        }
+        else
+        {
+            displayPhoto(tribute_name, false);
+        }
+    }
+}
+
+function begin()
+{
+    //request('/generated/roomchooser.py', function(response)
+    //{
+        getResults(startAll);
+    //});
+}
+
+function getResults(cb)
+{
+    // request('results.txt', function(response)
+    // {
+    //     var results = null;
+    //     try
+    //     {
+    //         results = JSON.parse(response);
+    //         for(var i = 0; i < results.length; i++)
+    //         {
+    //             results[i]['start'] = Date.parse(results[i]['start']);
+    //             results[i]['end'] = Date.parse(results[i]['end']);
+    //         }
+    //     }
+    //     catch(err)
+    //     {
+    //         console.log(err);
+    //     }
+    //     if(cb)
+    //     {
+    //         cb(results);
+    //     }
+    // });
+    
+    if(cb)
+    {
+        cb([]);
+    }
+}
+
+function keyUpDown(e, down)
+{
+    if(down && e.code == 'Escape')
+    {
+        removeArrow();
+        return;
+    }
+
+    dir = -1;
+    switch(e.code)
+    {
+        case 'ArrowDown':
+            dir = 0;
+            break;
+        case 'ArrowUp':
+            dir = 1;
+            break;
+        case 'ArrowLeft':
+            dir = 2;
+            break;
+        case 'ArrowRight':
+            dir = 3;
+            break;
+    }
+    
+    if(dir == -1)
+    {
+        return;
+    }
+    
+    keysPressed[dir] = down;
+    if(down && controlledIndex != -1)
+    {
+        all_characters[controlledIndex].turn(dir);
+    }
+}
+
+function keyPress(e)
+{
+    if(e.code == 'Space')
+    {
+        if(controlledIndex != -1)
+        {
+            all_characters[controlledIndex].unlock();
+            all_characters[controlledIndex].setArrowElement(null);
+        }
+        controlledIndex = (controlledIndex + 1) % all_characters.length;
+        all_characters[controlledIndex].lock();
+        all_characters[controlledIndex].setArrowElement(arrowElement);
+    }
+}
+
+function emulateKey(code, pressed)
+{
+    keyUpDown({code: code}, pressed);
+}
+
+var logged_user = '';
+var logger_pass = '';
+
+function login(user, pass)
+{
+    //request('/generated/roomchooser.py?action=login&u='+user+'&p='+pass, function(response)
+    //{
+    //    if(response.indexOf('ok') != -1)
+    //    {
+            logged_user = user;
+            logger_pass = pass;
+            document.getElementById('login').innerHTML = 'Logged in as '+logged_user;
+    //    }
+    //});
+}
+
+function vote(name, rank)
+{
+    if(!logged_user || !logger_pass)
+    {
+        return;
+    }
+        
+    //request('/generated/roomchooser.py?action=vote&u='+logged_user+'&p='+logger_pass+'&for='+name+'&r='+rank, function(response)
+    //{
+    //    if(response.indexOf('ok') != -1)
+    //    {
+            getResults(populateVoting);
+    //    }
+    //});
+}
+
+String.prototype.capitalize = function(lower) {
+    return (lower ? this.toLowerCase() : this).replace(/(?:^|\s)\S/g, function(a) { return a.toUpperCase(); });
+};
+
+function populateVoting(results)
+{
+    voting = document.getElementById("voting");
+    while (voting.firstChild)
+    {
+        voting.removeChild(voting.firstChild);
+    }
+    
+    for(var i = 0; i < results.length; i++)
+    {
+        if(results[i]['name'] == 'none')
+        {
+            continue;
+        }
+        
+        var vote_component = document.createElement('div');
+        vote_component.style.padding = '15px';
+        
+        
+        header_container = document.createElement('div');
+        header_container.style.position = 'relative';
+        header_container.style.display = 'block';
+        header_container.style.width = (vote_image_big * 8)+'px';
+        header_container.style.height = vote_image_big+'px';
+        
+        var photo_element = document.createElement('div');
+        photo_element.style.backgroundImage = 'url("images/'+results[i]["name"]+'.jpg")';
+        photo_element.style.width = vote_image_big+'px';
+        photo_element.style.height = vote_image_big+'px';
+        photo_element.style.backgroundSize = '100% 100%';
+        photo_element.style.display = 'block';
+        photo_element.style.float = 'left';
+        
+        var name_element = document.createElement('div');
+        name_element.style.paddingLeft = (vote_image_big / 5) + 'px';
+        name_element.innerHTML = results[i]["name"].capitalize(true);
+        name_element.style.display = 'block';
+        name_element.style.float = 'left';
+        name_element.style.fontSize = (vote_image_big / 3)+'pt';
+        
+        var rating_container = document.createElement('div');
+        var rating = document.createElement('div');
+        rating.style.fontSize = (vote_image_big / 3)+'pt';
+        rating.classList.add('rating');
+        rating_container.appendChild(rating);
+        rating_container.style.display = 'block';
+        rating_container.style.float = 'left';
+        rating_container.style.paddingLeft = (vote_image_big / 3)+'px';
+        
+        var num_of_stars = 5;
+        
+        var stars = '';
+        for(var s = 0; s < num_of_stars; s++)
+        {
+            stars += '<span onclick="vote(\''+results[i]["name"]+'\', '+(num_of_stars - s)+')">☆</span>';
+        }
+        
+        rating.innerHTML = stars;
+        
+        var voters = document.createElement('div');
+        voters.style.padding = '4px';
+        voters.style.paddingLeft = (vote_image_big * 1.2) + 'px';
+        
+        if(results[i]['votes'])
+        {
+            Object.keys(results[i]['votes']).forEach(function(key,index)
+            {
+                var voter = document.createElement('div');
+                voter.style.position='relative';
+                voter.style.padding='2px';
+                voter.style.height = (vote_image_small) + 'px';
+                
+                var voter_photo = document.createElement('div');
+                voter_photo.style.backgroundImage = 'url("images/'+key+'.jpg")';
+                voter_photo.style.width = vote_image_small + 'px';
+                voter_photo.style.height = vote_image_small + 'px';
+                voter_photo.style.backgroundSize = '100% 100%';
+                voter_photo.style.display = 'block';
+                voter_photo.style.float = 'left';
+                
+                var voter_name = document.createElement('div');
+                voter_name.style.paddingLeft = (vote_image_small / 2) + 'px';
+                voter_name.innerHTML = key.capitalize(true);
+                voter_name.style.display = 'block';
+                voter_name.style.float = 'left';
+                voter_name.style.fontSize = (vote_image_small / 3)+'pt';
+                
+                var voter_ranking = document.createElement('div');
+                var stars = '';
+                for(var r = 1; r <= 5; r++)
+                {
+                    stars += '<span>';
+                    if(r <= results[i]['votes'][key])
+                    {
+                        stars += '★';
+                    }
+                    else
+                    {
+                        stars += '☆';
+                    }
+                    stars += '</span>';
+                }
+                
+                voter_ranking.style.paddingLeft = (vote_image_small * 3) + 'px';
+                voter_ranking.innerHTML = stars;
+                voter_ranking.style.fontSize = (vote_image_small / 3)+'pt';
+                
+                voter.appendChild(voter_photo);
+                voter.appendChild(voter_name);
+                voter.appendChild(voter_ranking);
+                
+                voters.appendChild(voter);
+            });
+        }
+        
+        header_container.appendChild(photo_element);
+        header_container.appendChild(name_element);
+        header_container.appendChild(rating_container);
+        vote_component.appendChild(header_container);
+        vote_component.appendChild(voters);
+        voting.appendChild(vote_component);
+    }
+}
+
+window.onload = init;
+</script>
+
+</head>
+<body>
+<div id="arena" class="arena"></div>
+<!--<div id="login" class="login">
+    <div>User<br/><input type="text" id="user_text"/></div>
+    <div>Password<br/><input type="password" id="pass_text"/></div>
+    <input type="button" onclick="login(document.getElementById('user_text').value, document.getElementById('pass_text').value)" value="Login">
+</div>
+<div id="voting" class="voting"></div>
+<input type="button" value="Clear abduction" class="button" onclick="clearSeenAbduction();"/>
+-->
+
+<!--
+<input type="button" value="Select" style="position: absolute; top: 50px; left: 550px; width: 120px; height: 120px;" onclick="keyPress({code: 'Space'});"/>
+<input type="button" value="Exit" style="position: absolute; top: 50px; left: 850px; width: 120px; height: 120px;" onclick="emulateKey('Escape', true);"/>
+<input type="button" value="<" style="position: absolute; top: 200px; left: 580px; width: 120px; height: 120px;" onmousedown="emulateKey('ArrowLeft', true);"  onmouseup="emulateKey('ArrowLeft', false);"  onmouseout="emulateKey('ArrowLeft', false);" />
+<input type="button" value=">" style="position: absolute; top: 200px; left: 820px; width: 120px; height: 120px;" onmousedown="emulateKey('ArrowRight', true);" onmouseup="emulateKey('ArrowRight', false);" onmouseout="emulateKey('ArrowRight', false);"/>
+<input type="button" value="^" style="position: absolute; top:  80px; left: 700px; width: 120px; height: 120px;" onmousedown="emulateKey('ArrowUp', true);"    onmouseup="emulateKey('ArrowUp', false);"    onmouseout="emulateKey('ArrowUp', false);"   />
+<input type="button" value="V" style="position: absolute; top: 200px; left: 700px; width: 120px; height: 120px;" onmousedown="emulateKey('ArrowDown', true);"  onmouseup="emulateKey('ArrowDown', false);"  onmouseout="emulateKey('ArrowDown', false);" />
+-->
+
+<audio id="audio" controls loop autoplay>
+<source src="theme.ogg" type="audio/ogg">
+</audio>
+</body>
+</html>
